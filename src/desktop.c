@@ -230,12 +230,22 @@ static void create_desktop_and_taskbar(void)
 /* ------------------------------------------------------------------ */
 
 static lv_obj_t *instance_popup = NULL;
+static lv_obj_t *dismiss_overlay = NULL;   /* Click-away overlay */
+static lv_obj_t *start_menu     = NULL;
+static lv_obj_t *sub_programs   = NULL;
+static lv_obj_t *sub_documents  = NULL;
+static lv_obj_t *shutdown_dlg   = NULL;
+
 
 static void close_instance_popup(void)
 {
     if (instance_popup) {
         lv_obj_delete(instance_popup);
         instance_popup = NULL;
+    }
+    if (dismiss_overlay) {
+        lv_obj_delete(dismiss_overlay);
+        dismiss_overlay = NULL;
     }
 }
 
@@ -632,9 +642,52 @@ static int collect_group_windows(tb_group_t *g, win_state_t **out, int max)
     return n;
 }
 
+/* Called when the transparent overlay behind a menu is clicked.
+ * We must not delete dismiss_overlay from inside its own event
+ * handler — use lv_obj_delete_async so it's deferred. */
+static void on_dismiss_overlay(lv_event_t *e)
+{
+    (void)e;
+
+    /* Close popups (these don't touch dismiss_overlay since we
+     * clear the pointer before deleting) */
+    if (instance_popup) { lv_obj_delete(instance_popup); instance_popup = NULL; }
+    if (sub_programs)   { lv_obj_delete(sub_programs);   sub_programs   = NULL; }
+    if (sub_documents)  { lv_obj_delete(sub_documents);  sub_documents  = NULL; }
+    if (start_menu)     { lv_obj_delete(start_menu);     start_menu     = NULL; }
+
+    /* Defer deletion of ourselves */
+    if (dismiss_overlay) {
+        lv_obj_t *ov = dismiss_overlay;
+        dismiss_overlay = NULL;
+        lv_obj_delete_async(ov);
+    }
+}
+
+/* Create a full-screen transparent clickable overlay behind popups */
+static void create_dismiss_overlay(void)
+{
+    if (dismiss_overlay) return;
+
+    dismiss_overlay = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(dismiss_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
+    lv_obj_set_pos(dismiss_overlay, 0, 0);
+    lv_obj_set_style_bg_opa(dismiss_overlay, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dismiss_overlay, 0, 0);
+    lv_obj_set_style_radius(dismiss_overlay, 0, 0);
+    lv_obj_set_style_pad_all(dismiss_overlay, 0, 0);
+    lv_obj_remove_flag(dismiss_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(dismiss_overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(dismiss_overlay, on_dismiss_overlay,
+                        LV_EVENT_CLICKED, NULL);
+}
+
 static void on_tb_group_click(lv_event_t *e)
 {
     tb_group_t *g = (tb_group_t *)lv_event_get_user_data(e);
+
+    /* Close the start menu if it's open */
+    close_start_menu();
 
     /* If popup is already open for this group, close it */
     if (instance_popup) {
@@ -673,6 +726,9 @@ static void on_tb_group_click(lv_event_t *e)
     win_state_t *sorted[MAX_WINDOWS];
     int n = collect_group_windows(g, sorted, MAX_WINDOWS);
     if (n == 0) return;
+
+    /* Transparent overlay catches clicks outside the popup */
+    create_dismiss_overlay();
 
     instance_popup = lv_obj_create(lv_screen_active());
     lv_obj_add_style(instance_popup, &style_menu, 0);
@@ -825,16 +881,12 @@ static void create_editor(lv_group_t *group, int32_t x, int32_t y)
 /*  Start menu                                                        */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t *start_menu     = NULL;
-static lv_obj_t *sub_programs   = NULL;
-static lv_obj_t *sub_documents  = NULL;
-static lv_obj_t *shutdown_dlg   = NULL;
-
 static void close_start_menu(void)
 {
-    if (sub_programs)  { lv_obj_delete(sub_programs);  sub_programs  = NULL; }
-    if (sub_documents) { lv_obj_delete(sub_documents); sub_documents = NULL; }
-    if (start_menu)    { lv_obj_delete(start_menu);    start_menu    = NULL; }
+    if (sub_programs)   { lv_obj_delete(sub_programs);   sub_programs   = NULL; }
+    if (sub_documents)  { lv_obj_delete(sub_documents);  sub_documents  = NULL; }
+    if (start_menu)     { lv_obj_delete(start_menu);     start_menu     = NULL; }
+    if (dismiss_overlay){ lv_obj_delete(dismiss_overlay); dismiss_overlay = NULL; }
 }
 
 static void close_submenus(void)
@@ -1026,6 +1078,9 @@ static void on_start_click(lv_event_t *e)
         return;
     }
 
+    /* Transparent overlay catches clicks outside the menu */
+    create_dismiss_overlay();
+
     start_menu = lv_obj_create(lv_screen_active());
     lv_obj_add_style(start_menu, &style_menu, 0);
     lv_obj_set_size(start_menu, 160, LV_SIZE_CONTENT);
@@ -1040,7 +1095,6 @@ static void on_start_click(lv_event_t *e)
                                       LV_SYMBOL_DIRECTORY " Programs  "
                                       LV_SYMBOL_RIGHT);
     lv_obj_add_event_cb(mi_prog, on_programs_hover, LV_EVENT_HOVER_OVER, NULL);
-    lv_obj_add_event_cb(mi_prog, on_editor_click, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *mi_docs = add_menu_item(start_menu,
                                       LV_SYMBOL_FILE " Documents  "
