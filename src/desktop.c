@@ -8,6 +8,7 @@
  *   - Draggable, resizable windows with min/max/close
  *   - Click-to-raise z-ordering
  *   - Shutdown dialog with Power Off / Suspend / Restart
+ *   - Outline-box dragging/resizing (no real-time content reflow)
  *
  * This file includes ONLY lvgl.h.  Pure LVGL, no platform code.
  */
@@ -25,6 +26,8 @@
 #define MIN_WIN_W         120
 #define MIN_WIN_H          80
 #define MAX_TITLE          32
+
+#define OUTLINE_BORDER_W    2
 
 /* ------------------------------------------------------------------ */
 /*  Grip / resize direction                                           */
@@ -103,6 +106,66 @@ static win_state_t *win_state_alloc(void)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Outline box — shared by drag and resize operations                */
+/*                                                                    */
+/*  The target rect is tracked in plain integers so we never have to  */
+/*  read coordinates back from the LVGL object (theme defaults,       */
+/*  layout constraints, or padding could silently alter them).        */
+/* ------------------------------------------------------------------ */
+
+static lv_obj_t  *desktop_area;          /* forward — defined below   */
+
+static lv_obj_t  *outline_box = NULL;
+static lv_style_t style_outline;
+static int32_t    outline_x, outline_y, outline_w, outline_h;
+
+static void create_outline(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    outline_x = x;  outline_y = y;
+    outline_w = w;  outline_h = h;
+
+    if (outline_box) {
+        lv_obj_set_pos(outline_box, x, y);
+        lv_obj_set_size(outline_box, w, h);
+        lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_to_index(outline_box, -1);
+        return;
+    }
+
+    outline_box = lv_obj_create(desktop_area);
+    lv_obj_add_style(outline_box, &style_outline, 0);
+    /* Force-override any theme defaults that might shift the box */
+    lv_obj_set_style_pad_all(outline_box, 0, 0);
+    lv_obj_set_style_margin_all(outline_box, 0, 0);
+    lv_obj_set_style_max_width(outline_box, SCREEN_WIDTH, 0);
+    lv_obj_set_style_max_height(outline_box, SCREEN_HEIGHT, 0);
+    lv_obj_set_style_min_width(outline_box, 0, 0);
+    lv_obj_set_style_min_height(outline_box, 0, 0);
+    lv_obj_set_pos(outline_box, x, y);
+    lv_obj_set_size(outline_box, w, h);
+    lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_to_index(outline_box, -1);
+}
+
+static void move_outline(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    outline_x = x;  outline_y = y;
+    outline_w = w;  outline_h = h;
+    if (outline_box) {
+        lv_obj_set_pos(outline_box, x, y);
+        lv_obj_set_size(outline_box, w, h);
+    }
+}
+
+static void hide_outline(void)
+{
+    if (outline_box) {
+        lv_obj_add_flag(outline_box, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Forward declarations                                              */
 /* ------------------------------------------------------------------ */
 
@@ -171,6 +234,15 @@ static void init_styles(void)
     lv_style_set_bg_color(&style_grip_hover, lv_color_hex(0x4488FF));
     lv_style_set_bg_opa(&style_grip_hover, LV_OPA_50);
 
+    /* Outline box: transparent fill, bright dashed-look border */
+    lv_style_init(&style_outline);
+    lv_style_set_bg_opa(&style_outline, LV_OPA_TRANSP);
+    lv_style_set_border_color(&style_outline, lv_color_hex(0xCCCCFF));
+    lv_style_set_border_width(&style_outline, OUTLINE_BORDER_W);
+    lv_style_set_border_opa(&style_outline, LV_OPA_70);
+    lv_style_set_radius(&style_outline, 0);
+    lv_style_set_pad_all(&style_outline, 0);
+
     lv_style_init(&style_menu);
     lv_style_set_bg_color(&style_menu, lv_color_hex(0x222244));
     lv_style_set_bg_opa(&style_menu, LV_OPA_COVER);
@@ -199,7 +271,6 @@ static void init_styles(void)
 /*  Desktop + Taskbar                                                 */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t *desktop_area;
 static lv_obj_t *taskbar;
 
 static void create_desktop_and_taskbar(void)
@@ -220,6 +291,7 @@ static void create_desktop_and_taskbar(void)
     lv_obj_set_size(taskbar, SCREEN_WIDTH, TASKBAR_HEIGHT);
     lv_obj_align(taskbar, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_remove_flag(taskbar, LV_OBJ_FLAG_SCROLLABLE);
+
     lv_obj_set_flex_flow(taskbar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(taskbar, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -356,6 +428,11 @@ static void remove_from_tb_group(win_state_t *st)
 
 static void update_grips(win_state_t *st)
 {
+    /* Force layout so get_x/y/width/height return up-to-date values.
+     * Without this, grips are positioned at stale coordinates when
+     * called right after lv_obj_set_pos / lv_obj_set_size. */
+    lv_obj_update_layout(st->win);
+
     int32_t x = lv_obj_get_x(st->win);
     int32_t y = lv_obj_get_y(st->win);
     int32_t w = lv_obj_get_width(st->win);
@@ -408,7 +485,7 @@ static void on_win_pressed(lv_event_t *e)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Resize grip callbacks                                             */
+/*  Resize grip callbacks  (outline mode)                             */
 /* ------------------------------------------------------------------ */
 
 static void on_grip_pressed(lv_event_t *e)
@@ -427,6 +504,10 @@ static void on_grip_pressed(lv_event_t *e)
     st->rz_start_win_y = lv_obj_get_y(st->win);
     st->rz_start_win_w = lv_obj_get_width(st->win);
     st->rz_start_win_h = lv_obj_get_height(st->win);
+
+    /* Show outline at current window position */
+    create_outline(st->rz_start_win_x, st->rz_start_win_y,
+                   st->rz_start_win_w, st->rz_start_win_h);
 }
 
 static void on_grip_pressing(lv_event_t *e)
@@ -461,23 +542,30 @@ static void on_grip_pressing(lv_event_t *e)
         nh = MIN_WIN_H;
     }
 
-    lv_obj_set_pos(st->win, nx, ny);
-    lv_obj_set_size(st->win, nw, nh);
-    update_grips(st);
+    /* Move the outline only — don't touch the real window */
+    move_outline(nx, ny, nw, nh);
 }
 
 static void on_grip_released(lv_event_t *e)
 {
     grip_data_t *gd = (grip_data_t *)lv_event_get_user_data(e);
     win_state_t *st = gd->wst;
-    st->orig_x = lv_obj_get_x(st->win);
-    st->orig_y = lv_obj_get_y(st->win);
-    st->orig_w = lv_obj_get_width(st->win);
-    st->orig_h = lv_obj_get_height(st->win);
+
+    /* Apply the tracked outline rect to the real window */
+    lv_obj_set_pos(st->win, outline_x, outline_y);
+    lv_obj_set_size(st->win, outline_w, outline_h);
+
+    st->orig_x = outline_x;
+    st->orig_y = outline_y;
+    st->orig_w = outline_w;
+    st->orig_h = outline_h;
+
+    hide_outline();
+    update_grips(st);
 }
 
 /* ------------------------------------------------------------------ */
-/*  Title bar drag callbacks                                          */
+/*  Title bar drag callbacks  (outline mode)                          */
 /* ------------------------------------------------------------------ */
 
 static void on_header_pressed(lv_event_t *e)
@@ -491,21 +579,38 @@ static void on_header_pressed(lv_event_t *e)
     lv_indev_get_point(indev, &point);
 
     if (st->maximized) {
+        /* Restore from maximized on drag — compute proportional offset,
+         * but don't move the window yet; just set up for outline drag */
         int32_t desk_w  = lv_obj_get_width(desktop_area);
         int32_t ratio_x = (point.x * st->orig_w) / desk_w;
-        lv_obj_set_size(st->win, st->orig_w, st->orig_h);
         int32_t new_x = point.x - ratio_x;
-        lv_obj_set_pos(st->win, new_x, point.y);
+        int32_t new_y = point.y;
+
         st->maximized = false;
         lv_obj_t *lbl = lv_obj_get_child(st->btn_maximize, 0);
         if (lbl) lv_label_set_text(lbl, LV_SYMBOL_PLUS);
-        st->drag_offset_x = point.x - new_x;
-        st->drag_offset_y = point.y - point.y;
+
+        /* Restore real window to pre-maximize size at computed position */
+        lv_obj_set_size(st->win, st->orig_w, st->orig_h);
+        lv_obj_set_pos(st->win, new_x, new_y);
         update_grips(st);
         show_grips(st, true);
+
+        st->drag_offset_x = point.x - new_x;
+        st->drag_offset_y = 0;
+
+        /* Show outline at restored position */
+        create_outline(new_x, new_y, st->orig_w, st->orig_h);
     } else {
-        st->drag_offset_x = point.x - lv_obj_get_x(st->win);
-        st->drag_offset_y = point.y - lv_obj_get_y(st->win);
+        int32_t wx = lv_obj_get_x(st->win);
+        int32_t wy = lv_obj_get_y(st->win);
+        st->drag_offset_x = point.x - wx;
+        st->drag_offset_y = point.y - wy;
+
+        /* Show outline at current window position */
+        create_outline(wx, wy,
+                       lv_obj_get_width(st->win),
+                       lv_obj_get_height(st->win));
     }
     st->dragging = true;
 }
@@ -518,18 +623,25 @@ static void on_header_pressing(lv_event_t *e)
     if (!indev) return;
     lv_point_t point;
     lv_indev_get_point(indev, &point);
-    lv_obj_set_pos(st->win,
-                   point.x - st->drag_offset_x,
-                   point.y - st->drag_offset_y);
-    update_grips(st);
+
+    /* Move the outline only — don't touch the real window */
+    move_outline(point.x - st->drag_offset_x,
+                 point.y - st->drag_offset_y,
+                 outline_w, outline_h);
 }
 
 static void on_header_released(lv_event_t *e)
 {
     win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
     st->dragging = false;
-    st->orig_x = lv_obj_get_x(st->win);
-    st->orig_y = lv_obj_get_y(st->win);
+
+    /* Apply the tracked outline position to the real window */
+    lv_obj_set_pos(st->win, outline_x, outline_y);
+    st->orig_x = outline_x;
+    st->orig_y = outline_y;
+
+    hide_outline();
+    update_grips(st);
 }
 
 /* ------------------------------------------------------------------ */
