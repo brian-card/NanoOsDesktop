@@ -37,68 +37,68 @@ typedef enum {
     GRIP_N, GRIP_S, GRIP_E, GRIP_W,
     GRIP_NE, GRIP_NW, GRIP_SE, GRIP_SW,
     GRIP_COUNT
-} grip_dir_t;
+} GripDir;
 
-typedef struct win_state win_state_t;
+typedef struct WinState WinState;
 
 typedef struct {
-    grip_dir_t   dir;
-    win_state_t *wst;
-} grip_data_t;
+    GripDir   dir;
+    WinState *wst;
+} GripData;
 
 /* ------------------------------------------------------------------ */
 /*  Taskbar group — one button per unique window title                */
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    bool        in_use;
+    bool        inUse;
     char        title[MAX_TITLE];
     lv_obj_t   *btn;
     lv_obj_t   *label;
     int         count;
-} tb_group_t;
+} TbGroup;
 
-static tb_group_t tb_groups[MAX_TASKBAR_GROUPS];
+static TbGroup tbGroups[MAX_TASKBAR_GROUPS];
 
 /* ------------------------------------------------------------------ */
 /*  Window state                                                      */
 /* ------------------------------------------------------------------ */
 
-struct win_state {
-    bool        in_use;
+struct WinState {
+    bool        inUse;
     lv_obj_t   *win;
-    tb_group_t *group_tb;           /* Taskbar group this window belongs to */
-    lv_obj_t   *btn_maximize;
-    lv_group_t *input_group;
+    TbGroup    *groupTb;            /* Taskbar group this window belongs to */
+    lv_obj_t   *btnMaximize;
+    lv_group_t *inputGroup;
     char        title[MAX_TITLE];
-    int         creation_order;     /* For ordering in the popup */
+    int         creationOrder;      /* For ordering in the popup */
 
-    int32_t     orig_x, orig_y, orig_w, orig_h;
+    int32_t     origX, origY, origW, origH;
 
-    int32_t     drag_offset_x, drag_offset_y;
+    int32_t     dragOffsetX, dragOffsetY;
     bool        dragging;
 
-    int32_t     rz_start_mx, rz_start_my;
-    int32_t     rz_start_win_x, rz_start_win_y;
-    int32_t     rz_start_win_w, rz_start_win_h;
+    int32_t     rzStartMx, rzStartMy;
+    int32_t     rzStartWinX, rzStartWinY;
+    int32_t     rzStartWinW, rzStartWinH;
 
     lv_obj_t   *grips[GRIP_COUNT];
-    grip_data_t grip_data[GRIP_COUNT];
+    GripData    gripData[GRIP_COUNT];
 
     bool        maximized;
     bool        minimized;
 };
 
-static win_state_t windows[MAX_WINDOWS];
-static int next_creation_order = 0;
+static WinState windows[MAX_WINDOWS];
+static int nextCreationOrder = 0;
 
-static win_state_t *win_state_alloc(void)
+static WinState *winStateAlloc(void)
 {
     for (int i = 0; i < MAX_WINDOWS; i++) {
-        if (!windows[i].in_use) {
-            memset(&windows[i], 0, sizeof(win_state_t));
-            windows[i].in_use = true;
-            windows[i].creation_order = next_creation_order++;
+        if (!windows[i].inUse) {
+            memset(&windows[i], 0, sizeof(WinState));
+            windows[i].inUse = true;
+            windows[i].creationOrder = nextCreationOrder++;
             return &windows[i];
         }
     }
@@ -113,55 +113,55 @@ static win_state_t *win_state_alloc(void)
 /*  layout constraints, or padding could silently alter them).        */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t  *desktop_area;          /* forward — defined below   */
+static lv_obj_t  *desktopArea;          /* forward — defined below   */
 
-static lv_obj_t  *outline_box = NULL;
-static lv_style_t style_outline;
-static int32_t    outline_x, outline_y, outline_w, outline_h;
+static lv_obj_t  *outlineBox = NULL;
+static lv_style_t styleOutline;
+static int32_t    outlineX, outlineY, outlineW, outlineH;
 
-static void create_outline(int32_t x, int32_t y, int32_t w, int32_t h)
+static void createOutline(int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    outline_x = x;  outline_y = y;
-    outline_w = w;  outline_h = h;
+    outlineX = x;  outlineY = y;
+    outlineW = w;  outlineH = h;
 
-    if (outline_box) {
-        lv_obj_set_pos(outline_box, x, y);
-        lv_obj_set_size(outline_box, w, h);
-        lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_to_index(outline_box, -1);
+    if (outlineBox) {
+        lv_obj_set_pos(outlineBox, x, y);
+        lv_obj_set_size(outlineBox, w, h);
+        lv_obj_remove_flag(outlineBox, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_to_index(outlineBox, -1);
         return;
     }
 
-    outline_box = lv_obj_create(desktop_area);
-    lv_obj_add_style(outline_box, &style_outline, 0);
+    outlineBox = lv_obj_create(desktopArea);
+    lv_obj_add_style(outlineBox, &styleOutline, 0);
     /* Force-override any theme defaults that might shift the box */
-    lv_obj_set_style_pad_all(outline_box, 0, 0);
-    lv_obj_set_style_margin_all(outline_box, 0, 0);
-    lv_obj_set_style_max_width(outline_box, SCREEN_WIDTH, 0);
-    lv_obj_set_style_max_height(outline_box, SCREEN_HEIGHT, 0);
-    lv_obj_set_style_min_width(outline_box, 0, 0);
-    lv_obj_set_style_min_height(outline_box, 0, 0);
-    lv_obj_set_pos(outline_box, x, y);
-    lv_obj_set_size(outline_box, w, h);
-    lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(outline_box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_move_to_index(outline_box, -1);
+    lv_obj_set_style_pad_all(outlineBox, 0, 0);
+    lv_obj_set_style_margin_all(outlineBox, 0, 0);
+    lv_obj_set_style_max_width(outlineBox, SCREEN_WIDTH, 0);
+    lv_obj_set_style_max_height(outlineBox, SCREEN_HEIGHT, 0);
+    lv_obj_set_style_min_width(outlineBox, 0, 0);
+    lv_obj_set_style_min_height(outlineBox, 0, 0);
+    lv_obj_set_pos(outlineBox, x, y);
+    lv_obj_set_size(outlineBox, w, h);
+    lv_obj_remove_flag(outlineBox, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(outlineBox, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_to_index(outlineBox, -1);
 }
 
-static void move_outline(int32_t x, int32_t y, int32_t w, int32_t h)
+static void moveOutline(int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    outline_x = x;  outline_y = y;
-    outline_w = w;  outline_h = h;
-    if (outline_box) {
-        lv_obj_set_pos(outline_box, x, y);
-        lv_obj_set_size(outline_box, w, h);
+    outlineX = x;  outlineY = y;
+    outlineW = w;  outlineH = h;
+    if (outlineBox) {
+        lv_obj_set_pos(outlineBox, x, y);
+        lv_obj_set_size(outlineBox, w, h);
     }
 }
 
-static void hide_outline(void)
+static void hideOutline(void)
 {
-    if (outline_box) {
-        lv_obj_add_flag(outline_box, LV_OBJ_FLAG_HIDDEN);
+    if (outlineBox) {
+        lv_obj_add_flag(outlineBox, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -169,102 +169,102 @@ static void hide_outline(void)
 /*  Forward declarations                                              */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t *create_window(lv_obj_t *parent, const char *title,
+static lv_obj_t *createWindow(lv_obj_t *parent, const char *title,
                                int32_t x, int32_t y,
                                int32_t w, int32_t h,
                                lv_group_t *group);
-static void create_editor(lv_group_t *group, int32_t x, int32_t y);
-static void close_start_menu(void);
-static void update_tb_group_label(tb_group_t *g);
+static void createEditor(lv_group_t *group, int32_t x, int32_t y);
+static void closeStartMenu(void);
+static void updateTbGroupLabel(TbGroup *g);
 
 /* ------------------------------------------------------------------ */
 /*  Styles                                                            */
 /* ------------------------------------------------------------------ */
 
-static lv_style_t style_desktop;
-static lv_style_t style_taskbar;
-static lv_style_t style_taskbar_btn;
-static lv_style_t style_taskbar_btn_active;
-static lv_style_t style_grip;
-static lv_style_t style_grip_hover;
-static lv_style_t style_menu;
-static lv_style_t style_menu_item;
-static lv_style_t style_menu_item_hover;
+static lv_style_t styleDesktop;
+static lv_style_t styleTaskbar;
+static lv_style_t styleTaskbarBtn;
+static lv_style_t styleTaskbarBtnActive;
+static lv_style_t styleGrip;
+static lv_style_t styleGripHover;
+static lv_style_t styleMenu;
+static lv_style_t styleMenuItem;
+static lv_style_t styleMenuItemHover;
 
-static void init_styles(void)
+static void initStyles(void)
 {
-    lv_style_init(&style_desktop);
-    lv_style_set_bg_color(&style_desktop, lv_color_hex(0x2B4570));
-    lv_style_set_bg_opa(&style_desktop, LV_OPA_COVER);
-    lv_style_set_border_width(&style_desktop, 0);
-    lv_style_set_radius(&style_desktop, 0);
-    lv_style_set_pad_all(&style_desktop, 0);
+    lv_style_init(&styleDesktop);
+    lv_style_set_bg_color(&styleDesktop, lv_color_hex(0x2B4570));
+    lv_style_set_bg_opa(&styleDesktop, LV_OPA_COVER);
+    lv_style_set_border_width(&styleDesktop, 0);
+    lv_style_set_radius(&styleDesktop, 0);
+    lv_style_set_pad_all(&styleDesktop, 0);
 
-    lv_style_init(&style_taskbar);
-    lv_style_set_bg_color(&style_taskbar, lv_color_hex(0x1A1A2E));
-    lv_style_set_bg_opa(&style_taskbar, LV_OPA_COVER);
-    lv_style_set_border_width(&style_taskbar, 0);
-    lv_style_set_radius(&style_taskbar, 0);
-    lv_style_set_pad_left(&style_taskbar, 4);
-    lv_style_set_pad_right(&style_taskbar, 4);
-    lv_style_set_pad_top(&style_taskbar, 2);
-    lv_style_set_pad_bottom(&style_taskbar, 2);
-    lv_style_set_pad_column(&style_taskbar, 4);
+    lv_style_init(&styleTaskbar);
+    lv_style_set_bg_color(&styleTaskbar, lv_color_hex(0x1A1A2E));
+    lv_style_set_bg_opa(&styleTaskbar, LV_OPA_COVER);
+    lv_style_set_border_width(&styleTaskbar, 0);
+    lv_style_set_radius(&styleTaskbar, 0);
+    lv_style_set_pad_left(&styleTaskbar, 4);
+    lv_style_set_pad_right(&styleTaskbar, 4);
+    lv_style_set_pad_top(&styleTaskbar, 2);
+    lv_style_set_pad_bottom(&styleTaskbar, 2);
+    lv_style_set_pad_column(&styleTaskbar, 4);
 
-    lv_style_init(&style_taskbar_btn);
-    lv_style_set_bg_color(&style_taskbar_btn, lv_color_hex(0x3A3A5C));
-    lv_style_set_bg_opa(&style_taskbar_btn, LV_OPA_COVER);
-    lv_style_set_text_color(&style_taskbar_btn, lv_color_white());
-    lv_style_set_radius(&style_taskbar_btn, 4);
-    lv_style_set_pad_left(&style_taskbar_btn, 10);
-    lv_style_set_pad_right(&style_taskbar_btn, 10);
-    lv_style_set_pad_top(&style_taskbar_btn, 4);
-    lv_style_set_pad_bottom(&style_taskbar_btn, 4);
+    lv_style_init(&styleTaskbarBtn);
+    lv_style_set_bg_color(&styleTaskbarBtn, lv_color_hex(0x3A3A5C));
+    lv_style_set_bg_opa(&styleTaskbarBtn, LV_OPA_COVER);
+    lv_style_set_text_color(&styleTaskbarBtn, lv_color_white());
+    lv_style_set_radius(&styleTaskbarBtn, 4);
+    lv_style_set_pad_left(&styleTaskbarBtn, 10);
+    lv_style_set_pad_right(&styleTaskbarBtn, 10);
+    lv_style_set_pad_top(&styleTaskbarBtn, 4);
+    lv_style_set_pad_bottom(&styleTaskbarBtn, 4);
 
-    lv_style_init(&style_taskbar_btn_active);
-    lv_style_set_bg_color(&style_taskbar_btn_active, lv_color_hex(0x5A5A8C));
+    lv_style_init(&styleTaskbarBtnActive);
+    lv_style_set_bg_color(&styleTaskbarBtnActive, lv_color_hex(0x5A5A8C));
 
-    lv_style_init(&style_grip);
-    lv_style_set_bg_opa(&style_grip, LV_OPA_TRANSP);
-    lv_style_set_border_width(&style_grip, 0);
-    lv_style_set_radius(&style_grip, 0);
-    lv_style_set_pad_all(&style_grip, 0);
+    lv_style_init(&styleGrip);
+    lv_style_set_bg_opa(&styleGrip, LV_OPA_TRANSP);
+    lv_style_set_border_width(&styleGrip, 0);
+    lv_style_set_radius(&styleGrip, 0);
+    lv_style_set_pad_all(&styleGrip, 0);
 
-    lv_style_init(&style_grip_hover);
-    lv_style_set_bg_color(&style_grip_hover, lv_color_hex(0x4488FF));
-    lv_style_set_bg_opa(&style_grip_hover, LV_OPA_50);
+    lv_style_init(&styleGripHover);
+    lv_style_set_bg_color(&styleGripHover, lv_color_hex(0x4488FF));
+    lv_style_set_bg_opa(&styleGripHover, LV_OPA_50);
 
     /* Outline box: transparent fill, bright dashed-look border */
-    lv_style_init(&style_outline);
-    lv_style_set_bg_opa(&style_outline, LV_OPA_TRANSP);
-    lv_style_set_border_color(&style_outline, lv_color_hex(0xCCCCFF));
-    lv_style_set_border_width(&style_outline, OUTLINE_BORDER_W);
-    lv_style_set_border_opa(&style_outline, LV_OPA_70);
-    lv_style_set_radius(&style_outline, 0);
-    lv_style_set_pad_all(&style_outline, 0);
+    lv_style_init(&styleOutline);
+    lv_style_set_bg_opa(&styleOutline, LV_OPA_TRANSP);
+    lv_style_set_border_color(&styleOutline, lv_color_hex(0xCCCCFF));
+    lv_style_set_border_width(&styleOutline, OUTLINE_BORDER_W);
+    lv_style_set_border_opa(&styleOutline, LV_OPA_70);
+    lv_style_set_radius(&styleOutline, 0);
+    lv_style_set_pad_all(&styleOutline, 0);
 
-    lv_style_init(&style_menu);
-    lv_style_set_bg_color(&style_menu, lv_color_hex(0x222244));
-    lv_style_set_bg_opa(&style_menu, LV_OPA_COVER);
-    lv_style_set_border_color(&style_menu, lv_color_hex(0x444466));
-    lv_style_set_border_width(&style_menu, 1);
-    lv_style_set_radius(&style_menu, 4);
-    lv_style_set_pad_all(&style_menu, 2);
-    lv_style_set_pad_row(&style_menu, 0);
+    lv_style_init(&styleMenu);
+    lv_style_set_bg_color(&styleMenu, lv_color_hex(0x222244));
+    lv_style_set_bg_opa(&styleMenu, LV_OPA_COVER);
+    lv_style_set_border_color(&styleMenu, lv_color_hex(0x444466));
+    lv_style_set_border_width(&styleMenu, 1);
+    lv_style_set_radius(&styleMenu, 4);
+    lv_style_set_pad_all(&styleMenu, 2);
+    lv_style_set_pad_row(&styleMenu, 0);
 
-    lv_style_init(&style_menu_item);
-    lv_style_set_bg_opa(&style_menu_item, LV_OPA_TRANSP);
-    lv_style_set_text_color(&style_menu_item, lv_color_white());
-    lv_style_set_pad_left(&style_menu_item, 10);
-    lv_style_set_pad_right(&style_menu_item, 10);
-    lv_style_set_pad_top(&style_menu_item, 6);
-    lv_style_set_pad_bottom(&style_menu_item, 6);
-    lv_style_set_radius(&style_menu_item, 2);
-    lv_style_set_border_width(&style_menu_item, 0);
+    lv_style_init(&styleMenuItem);
+    lv_style_set_bg_opa(&styleMenuItem, LV_OPA_TRANSP);
+    lv_style_set_text_color(&styleMenuItem, lv_color_white());
+    lv_style_set_pad_left(&styleMenuItem, 10);
+    lv_style_set_pad_right(&styleMenuItem, 10);
+    lv_style_set_pad_top(&styleMenuItem, 6);
+    lv_style_set_pad_bottom(&styleMenuItem, 6);
+    lv_style_set_radius(&styleMenuItem, 2);
+    lv_style_set_border_width(&styleMenuItem, 0);
 
-    lv_style_init(&style_menu_item_hover);
-    lv_style_set_bg_color(&style_menu_item_hover, lv_color_hex(0x4466AA));
-    lv_style_set_bg_opa(&style_menu_item_hover, LV_OPA_COVER);
+    lv_style_init(&styleMenuItemHover);
+    lv_style_set_bg_color(&styleMenuItemHover, lv_color_hex(0x4466AA));
+    lv_style_set_bg_opa(&styleMenuItemHover, LV_OPA_COVER);
 }
 
 /* ------------------------------------------------------------------ */
@@ -273,21 +273,21 @@ static void init_styles(void)
 
 static lv_obj_t *taskbar;
 
-static void create_desktop_and_taskbar(void)
+static void createDesktopAndTaskbar(void)
 {
     lv_obj_t *scr = lv_screen_active();
     lv_obj_set_style_pad_all(scr, 0, 0);
     lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    desktop_area = lv_obj_create(scr);
-    lv_obj_add_style(desktop_area, &style_desktop, 0);
-    lv_obj_set_size(desktop_area, SCREEN_WIDTH,
+    desktopArea = lv_obj_create(scr);
+    lv_obj_add_style(desktopArea, &styleDesktop, 0);
+    lv_obj_set_size(desktopArea, SCREEN_WIDTH,
                     SCREEN_HEIGHT - TASKBAR_HEIGHT);
-    lv_obj_align(desktop_area, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_obj_remove_flag(desktop_area, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(desktopArea, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_remove_flag(desktopArea, LV_OBJ_FLAG_SCROLLABLE);
 
     taskbar = lv_obj_create(scr);
-    lv_obj_add_style(taskbar, &style_taskbar, 0);
+    lv_obj_add_style(taskbar, &styleTaskbar, 0);
     lv_obj_set_size(taskbar, SCREEN_WIDTH, TASKBAR_HEIGHT);
     lv_obj_align(taskbar, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     lv_obj_remove_flag(taskbar, LV_OBJ_FLAG_SCROLLABLE);
@@ -301,59 +301,59 @@ static void create_desktop_and_taskbar(void)
 /*  Taskbar group management                                          */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t *instance_popup = NULL;
-static lv_obj_t *dismiss_overlay = NULL;   /* Click-away overlay */
-static lv_obj_t *start_menu     = NULL;
-static lv_obj_t *sub_programs   = NULL;
-static lv_obj_t *sub_documents  = NULL;
-static lv_obj_t *shutdown_dlg   = NULL;
+static lv_obj_t *instancePopup  = NULL;
+static lv_obj_t *dismissOverlay = NULL;   /* Click-away overlay */
+static lv_obj_t *startMenu      = NULL;
+static lv_obj_t *subPrograms    = NULL;
+static lv_obj_t *subDocuments   = NULL;
+static lv_obj_t *shutdownDlg    = NULL;
 
 
-static void close_instance_popup(void)
+static void closeInstancePopup(void)
 {
-    if (instance_popup) {
-        lv_obj_delete(instance_popup);
-        instance_popup = NULL;
+    if (instancePopup) {
+        lv_obj_delete(instancePopup);
+        instancePopup = NULL;
     }
-    if (dismiss_overlay) {
-        lv_obj_delete(dismiss_overlay);
-        dismiss_overlay = NULL;
+    if (dismissOverlay) {
+        lv_obj_delete(dismissOverlay);
+        dismissOverlay = NULL;
     }
 }
 
 /* Forward: called when the taskbar group button is clicked */
-static void on_tb_group_click(lv_event_t *e);
+static void onTbGroupClick(lv_event_t *e);
 
-static tb_group_t *find_tb_group(const char *title)
+static TbGroup *findTbGroup(const char *title)
 {
     for (int i = 0; i < MAX_TASKBAR_GROUPS; i++) {
-        if (tb_groups[i].in_use &&
-            strcmp(tb_groups[i].title, title) == 0)
-            return &tb_groups[i];
+        if (tbGroups[i].inUse &&
+            strcmp(tbGroups[i].title, title) == 0)
+            return &tbGroups[i];
     }
     return NULL;
 }
 
-static tb_group_t *create_tb_group(const char *title)
+static TbGroup *createTbGroup(const char *title)
 {
     for (int i = 0; i < MAX_TASKBAR_GROUPS; i++) {
-        if (!tb_groups[i].in_use) {
-            tb_group_t *g = &tb_groups[i];
-            memset(g, 0, sizeof(tb_group_t));
-            g->in_use = true;
+        if (!tbGroups[i].inUse) {
+            TbGroup *g = &tbGroups[i];
+            memset(g, 0, sizeof(TbGroup));
+            g->inUse = true;
             strncpy(g->title, title, MAX_TITLE - 1);
             g->title[MAX_TITLE - 1] = '\0';
 
             g->btn = lv_button_create(taskbar);
-            lv_obj_add_style(g->btn, &style_taskbar_btn, 0);
-            lv_obj_add_style(g->btn, &style_taskbar_btn_active, 0);
+            lv_obj_add_style(g->btn, &styleTaskbarBtn, 0);
+            lv_obj_add_style(g->btn, &styleTaskbarBtnActive, 0);
             lv_obj_set_height(g->btn, LV_SIZE_CONTENT);
 
             g->label = lv_label_create(g->btn);
             lv_label_set_text(g->label, title);
             lv_obj_center(g->label);
 
-            lv_obj_add_event_cb(g->btn, on_tb_group_click,
+            lv_obj_add_event_cb(g->btn, onTbGroupClick,
                                 LV_EVENT_CLICKED, g);
             return g;
         }
@@ -361,16 +361,16 @@ static tb_group_t *create_tb_group(const char *title)
     return NULL;
 }
 
-static tb_group_t *get_or_create_tb_group(const char *title)
+static TbGroup *getOrCreateTbGroup(const char *title)
 {
-    tb_group_t *g = find_tb_group(title);
+    TbGroup *g = findTbGroup(title);
     if (g) return g;
-    return create_tb_group(title);
+    return createTbGroup(title);
 }
 
-static void update_tb_group_label(tb_group_t *g)
+static void updateTbGroupLabel(TbGroup *g)
 {
-    if (!g || !g->in_use) return;
+    if (!g || !g->inUse) return;
 
     if (g->count <= 1) {
         lv_label_set_text(g->label, g->title);
@@ -397,36 +397,36 @@ static void update_tb_group_label(tb_group_t *g)
     }
 }
 
-static void add_to_tb_group(win_state_t *st)
+static void addToTbGroup(WinState *st)
 {
-    tb_group_t *g = get_or_create_tb_group(st->title);
+    TbGroup *g = getOrCreateTbGroup(st->title);
     if (!g) return;
-    st->group_tb = g;
+    st->groupTb = g;
     g->count++;
-    update_tb_group_label(g);
+    updateTbGroupLabel(g);
 }
 
-static void remove_from_tb_group(win_state_t *st)
+static void removeFromTbGroup(WinState *st)
 {
-    tb_group_t *g = st->group_tb;
+    TbGroup *g = st->groupTb;
     if (!g) return;
     g->count--;
     if (g->count <= 0) {
         lv_obj_delete(g->btn);
         g->btn   = NULL;
         g->label = NULL;
-        g->in_use = false;
+        g->inUse = false;
     } else {
-        update_tb_group_label(g);
+        updateTbGroupLabel(g);
     }
-    st->group_tb = NULL;
+    st->groupTb = NULL;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Grip helpers                                                      */
 /* ------------------------------------------------------------------ */
 
-static void update_grips(win_state_t *st)
+static void updateGrips(WinState *st)
 {
     /* Force layout so get_x/y/width/height return up-to-date values.
      * Without this, grips are positioned at stale coordinates when
@@ -457,7 +457,7 @@ static void update_grips(win_state_t *st)
     lv_obj_set_size(st->grips[GRIP_SE], GRIP_SIZE, GRIP_SIZE);
 }
 
-static void show_grips(win_state_t *st, bool visible)
+static void showGrips(WinState *st, bool visible)
 {
     for (int i = 0; i < GRIP_COUNT; i++) {
         if (visible)
@@ -471,60 +471,60 @@ static void show_grips(win_state_t *st, bool visible)
 /*  Window z-order                                                    */
 /* ------------------------------------------------------------------ */
 
-static void raise_window(win_state_t *st)
+static void raiseWindow(WinState *st)
 {
     lv_obj_move_to_index(st->win, -1);
     for (int i = 0; i < GRIP_COUNT; i++)
         lv_obj_move_to_index(st->grips[i], -1);
 }
 
-static void on_win_pressed(lv_event_t *e)
+static void onWinPressed(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
-    raise_window(st);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
+    raiseWindow(st);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Resize grip callbacks  (outline mode)                             */
 /* ------------------------------------------------------------------ */
 
-static void on_grip_pressed(lv_event_t *e)
+static void onGripPressed(lv_event_t *e)
 {
-    grip_data_t *gd = (grip_data_t *)lv_event_get_user_data(e);
-    win_state_t *st = gd->wst;
-    raise_window(st);
+    GripData *gd = (GripData *)lv_event_get_user_data(e);
+    WinState *st = gd->wst;
+    raiseWindow(st);
 
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
     lv_point_t p;
     lv_indev_get_point(indev, &p);
-    st->rz_start_mx    = p.x;
-    st->rz_start_my    = p.y;
-    st->rz_start_win_x = lv_obj_get_x(st->win);
-    st->rz_start_win_y = lv_obj_get_y(st->win);
-    st->rz_start_win_w = lv_obj_get_width(st->win);
-    st->rz_start_win_h = lv_obj_get_height(st->win);
+    st->rzStartMx    = p.x;
+    st->rzStartMy    = p.y;
+    st->rzStartWinX = lv_obj_get_x(st->win);
+    st->rzStartWinY = lv_obj_get_y(st->win);
+    st->rzStartWinW = lv_obj_get_width(st->win);
+    st->rzStartWinH = lv_obj_get_height(st->win);
 
     /* Show outline at current window position */
-    create_outline(st->rz_start_win_x, st->rz_start_win_y,
-                   st->rz_start_win_w, st->rz_start_win_h);
+    createOutline(st->rzStartWinX, st->rzStartWinY,
+                  st->rzStartWinW, st->rzStartWinH);
 }
 
-static void on_grip_pressing(lv_event_t *e)
+static void onGripPressing(lv_event_t *e)
 {
-    grip_data_t *gd = (grip_data_t *)lv_event_get_user_data(e);
-    win_state_t *st = gd->wst;
-    grip_dir_t   dir = gd->dir;
+    GripData *gd = (GripData *)lv_event_get_user_data(e);
+    WinState *st = gd->wst;
+    GripDir   dir = gd->dir;
 
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
     lv_point_t p;
     lv_indev_get_point(indev, &p);
 
-    int32_t dx = p.x - st->rz_start_mx;
-    int32_t dy = p.y - st->rz_start_my;
-    int32_t nx = st->rz_start_win_x, ny = st->rz_start_win_y;
-    int32_t nw = st->rz_start_win_w, nh = st->rz_start_win_h;
+    int32_t dx = p.x - st->rzStartMx;
+    int32_t dy = p.y - st->rzStartMy;
+    int32_t nx = st->rzStartWinX, ny = st->rzStartWinY;
+    int32_t nw = st->rzStartWinW, nh = st->rzStartWinH;
 
     if (dir == GRIP_E || dir == GRIP_NE || dir == GRIP_SE) nw += dx;
     if (dir == GRIP_W || dir == GRIP_NW || dir == GRIP_SW) { nx += dx; nw -= dx; }
@@ -533,47 +533,47 @@ static void on_grip_pressing(lv_event_t *e)
 
     if (nw < MIN_WIN_W) {
         if (dir == GRIP_W || dir == GRIP_NW || dir == GRIP_SW)
-            nx = st->rz_start_win_x + st->rz_start_win_w - MIN_WIN_W;
+            nx = st->rzStartWinX + st->rzStartWinW - MIN_WIN_W;
         nw = MIN_WIN_W;
     }
     if (nh < MIN_WIN_H) {
         if (dir == GRIP_N || dir == GRIP_NE || dir == GRIP_NW)
-            ny = st->rz_start_win_y + st->rz_start_win_h - MIN_WIN_H;
+            ny = st->rzStartWinY + st->rzStartWinH - MIN_WIN_H;
         nh = MIN_WIN_H;
     }
 
     /* Move the outline only — don't touch the real window */
-    move_outline(nx, ny, nw, nh);
+    moveOutline(nx, ny, nw, nh);
 }
 
-static void on_grip_released(lv_event_t *e)
+static void onGripReleased(lv_event_t *e)
 {
-    grip_data_t *gd = (grip_data_t *)lv_event_get_user_data(e);
-    win_state_t *st = gd->wst;
+    GripData *gd = (GripData *)lv_event_get_user_data(e);
+    WinState *st = gd->wst;
 
     /* Apply the tracked outline rect to the real window */
-    lv_obj_set_pos(st->win, outline_x, outline_y);
-    lv_obj_set_size(st->win, outline_w, outline_h);
+    lv_obj_set_pos(st->win, outlineX, outlineY);
+    lv_obj_set_size(st->win, outlineW, outlineH);
 
-    st->orig_x = outline_x;
-    st->orig_y = outline_y;
-    st->orig_w = outline_w;
-    st->orig_h = outline_h;
+    st->origX = outlineX;
+    st->origY = outlineY;
+    st->origW = outlineW;
+    st->origH = outlineH;
 
-    hide_outline();
-    update_grips(st);
+    hideOutline();
+    updateGrips(st);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Title bar drag callbacks  (outline mode)                          */
 /* ------------------------------------------------------------------ */
 
-static void on_header_pressed(lv_event_t *e)
+static void onHeaderPressed(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
-    raise_window(st);
+    raiseWindow(st);
 
     lv_point_t point;
     lv_indev_get_point(indev, &point);
@@ -581,43 +581,43 @@ static void on_header_pressed(lv_event_t *e)
     if (st->maximized) {
         /* Restore from maximized on drag — compute proportional offset,
          * but don't move the window yet; just set up for outline drag */
-        int32_t desk_w  = lv_obj_get_width(desktop_area);
-        int32_t ratio_x = (point.x * st->orig_w) / desk_w;
-        int32_t new_x = point.x - ratio_x;
-        int32_t new_y = point.y;
+        int32_t deskW  = lv_obj_get_width(desktopArea);
+        int32_t ratioX = (point.x * st->origW) / deskW;
+        int32_t newX = point.x - ratioX;
+        int32_t newY = point.y;
 
         st->maximized = false;
-        lv_obj_t *lbl = lv_obj_get_child(st->btn_maximize, 0);
+        lv_obj_t *lbl = lv_obj_get_child(st->btnMaximize, 0);
         if (lbl) lv_label_set_text(lbl, LV_SYMBOL_PLUS);
 
         /* Restore real window to pre-maximize size at computed position */
-        lv_obj_set_size(st->win, st->orig_w, st->orig_h);
-        lv_obj_set_pos(st->win, new_x, new_y);
-        update_grips(st);
-        show_grips(st, true);
+        lv_obj_set_size(st->win, st->origW, st->origH);
+        lv_obj_set_pos(st->win, newX, newY);
+        updateGrips(st);
+        showGrips(st, true);
 
-        st->drag_offset_x = point.x - new_x;
-        st->drag_offset_y = 0;
+        st->dragOffsetX = point.x - newX;
+        st->dragOffsetY = 0;
 
         /* Show outline at restored position */
-        create_outline(new_x, new_y, st->orig_w, st->orig_h);
+        createOutline(newX, newY, st->origW, st->origH);
     } else {
         int32_t wx = lv_obj_get_x(st->win);
         int32_t wy = lv_obj_get_y(st->win);
-        st->drag_offset_x = point.x - wx;
-        st->drag_offset_y = point.y - wy;
+        st->dragOffsetX = point.x - wx;
+        st->dragOffsetY = point.y - wy;
 
         /* Show outline at current window position */
-        create_outline(wx, wy,
+        createOutline(wx, wy,
                        lv_obj_get_width(st->win),
                        lv_obj_get_height(st->win));
     }
     st->dragging = true;
 }
 
-static void on_header_pressing(lv_event_t *e)
+static void onHeaderPressing(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     if (!st->dragging) return;
     lv_indev_t *indev = lv_indev_active();
     if (!indev) return;
@@ -625,67 +625,67 @@ static void on_header_pressing(lv_event_t *e)
     lv_indev_get_point(indev, &point);
 
     /* Move the outline only — don't touch the real window */
-    move_outline(point.x - st->drag_offset_x,
-                 point.y - st->drag_offset_y,
-                 outline_w, outline_h);
+    moveOutline(point.x - st->dragOffsetX,
+                point.y - st->dragOffsetY,
+                outlineW, outlineH);
 }
 
-static void on_header_released(lv_event_t *e)
+static void onHeaderReleased(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     st->dragging = false;
 
     /* Apply the tracked outline position to the real window */
-    lv_obj_set_pos(st->win, outline_x, outline_y);
-    st->orig_x = outline_x;
-    st->orig_y = outline_y;
+    lv_obj_set_pos(st->win, outlineX, outlineY);
+    st->origX = outlineX;
+    st->origY = outlineY;
 
-    hide_outline();
-    update_grips(st);
+    hideOutline();
+    updateGrips(st);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Window button callbacks                                           */
 /* ------------------------------------------------------------------ */
 
-static void on_minimize(lv_event_t *e)
+static void onMinimize(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     st->minimized = true;
     lv_obj_add_flag(st->win, LV_OBJ_FLAG_HIDDEN);
-    show_grips(st, false);
+    showGrips(st, false);
 }
 
-static void on_maximize(lv_event_t *e)
+static void onMaximize(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     if (!st->maximized) {
-        st->orig_x = lv_obj_get_x(st->win);
-        st->orig_y = lv_obj_get_y(st->win);
-        st->orig_w = lv_obj_get_width(st->win);
-        st->orig_h = lv_obj_get_height(st->win);
+        st->origX = lv_obj_get_x(st->win);
+        st->origY = lv_obj_get_y(st->win);
+        st->origW = lv_obj_get_width(st->win);
+        st->origH = lv_obj_get_height(st->win);
         lv_obj_set_pos(st->win, 0, 0);
         lv_obj_set_size(st->win,
-                        lv_obj_get_width(desktop_area),
-                        lv_obj_get_height(desktop_area));
+                        lv_obj_get_width(desktopArea),
+                        lv_obj_get_height(desktopArea));
         st->maximized = true;
-        lv_obj_t *lbl = lv_obj_get_child(st->btn_maximize, 0);
+        lv_obj_t *lbl = lv_obj_get_child(st->btnMaximize, 0);
         if (lbl) lv_label_set_text(lbl, LV_SYMBOL_COPY);
-        show_grips(st, false);
+        showGrips(st, false);
     } else {
-        lv_obj_set_pos(st->win, st->orig_x, st->orig_y);
-        lv_obj_set_size(st->win, st->orig_w, st->orig_h);
+        lv_obj_set_pos(st->win, st->origX, st->origY);
+        lv_obj_set_size(st->win, st->origW, st->origH);
         st->maximized = false;
-        lv_obj_t *lbl = lv_obj_get_child(st->btn_maximize, 0);
+        lv_obj_t *lbl = lv_obj_get_child(st->btnMaximize, 0);
         if (lbl) lv_label_set_text(lbl, LV_SYMBOL_PLUS);
-        show_grips(st, true);
-        update_grips(st);
+        showGrips(st, true);
+        updateGrips(st);
     }
 }
 
-static void on_close(lv_event_t *e)
+static void onClose(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
+    WinState *st = (WinState *)lv_event_get_user_data(e);
     for (int i = 0; i < GRIP_COUNT; i++) {
         if (st->grips[i]) {
             lv_obj_delete(st->grips[i]);
@@ -693,9 +693,9 @@ static void on_close(lv_event_t *e)
         }
     }
     lv_obj_delete(st->win);
-    remove_from_tb_group(st);
+    removeFromTbGroup(st);
     st->win    = NULL;
-    st->in_use = false;
+    st->inUse = false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -703,11 +703,11 @@ static void on_close(lv_event_t *e)
 /* ------------------------------------------------------------------ */
 
 /* Helper to add a clickable menu item */
-static lv_obj_t *add_menu_item(lv_obj_t *parent, const char *text)
+static lv_obj_t *addMenuItem(lv_obj_t *parent, const char *text)
 {
     lv_obj_t *item = lv_obj_create(parent);
-    lv_obj_add_style(item, &style_menu_item, 0);
-    lv_obj_add_style(item, &style_menu_item_hover, LV_STATE_HOVERED);
+    lv_obj_add_style(item, &styleMenuItem, 0);
+    lv_obj_add_style(item, &styleMenuItemHover, LV_STATE_HOVERED);
     lv_obj_set_size(item, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_remove_flag(item, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
@@ -717,35 +717,35 @@ static lv_obj_t *add_menu_item(lv_obj_t *parent, const char *text)
 }
 
 /* Called when an instance in the popup is clicked */
-static void on_instance_click(lv_event_t *e)
+static void onInstanceClick(lv_event_t *e)
 {
-    win_state_t *st = (win_state_t *)lv_event_get_user_data(e);
-    close_instance_popup();
+    WinState *st = (WinState *)lv_event_get_user_data(e);
+    closeInstancePopup();
 
     if (st->minimized) {
         st->minimized = false;
         lv_obj_remove_flag(st->win, LV_OBJ_FLAG_HIDDEN);
         if (!st->maximized) {
-            show_grips(st, true);
-            update_grips(st);
+            showGrips(st, true);
+            updateGrips(st);
         }
     }
-    raise_window(st);
+    raiseWindow(st);
 }
 
 /* Collect windows belonging to a group, sorted by creation order */
-static int collect_group_windows(tb_group_t *g, win_state_t **out, int max)
+static int collectGroupWindows(TbGroup *g, WinState **out, int max)
 {
     int n = 0;
     for (int i = 0; i < MAX_WINDOWS && n < max; i++) {
-        if (windows[i].in_use && windows[i].group_tb == g)
+        if (windows[i].inUse && windows[i].groupTb == g)
             out[n++] = &windows[i];
     }
-    /* Simple insertion sort by creation_order */
+    /* Simple insertion sort by creationOrder */
     for (int i = 1; i < n; i++) {
-        win_state_t *key = out[i];
+        WinState *key = out[i];
         int j = i - 1;
-        while (j >= 0 && out[j]->creation_order > key->creation_order) {
+        while (j >= 0 && out[j]->creationOrder > key->creationOrder) {
             out[j + 1] = out[j];
             j--;
         }
@@ -755,63 +755,63 @@ static int collect_group_windows(tb_group_t *g, win_state_t **out, int max)
 }
 
 /* Called when the transparent overlay behind a menu is clicked.
- * We must not delete dismiss_overlay from inside its own event
+ * We must not delete dismissOverlay from inside its own event
  * handler — use lv_obj_delete_async so it's deferred. */
-static void on_dismiss_overlay(lv_event_t *e)
+static void onDismissOverlay(lv_event_t *e)
 {
     (void)e;
 
-    /* Close popups (these don't touch dismiss_overlay since we
+    /* Close popups (these don't touch dismissOverlay since we
      * clear the pointer before deleting) */
-    if (instance_popup) { lv_obj_delete(instance_popup); instance_popup = NULL; }
-    if (sub_programs)   { lv_obj_delete(sub_programs);   sub_programs   = NULL; }
-    if (sub_documents)  { lv_obj_delete(sub_documents);  sub_documents  = NULL; }
-    if (start_menu)     { lv_obj_delete(start_menu);     start_menu     = NULL; }
+    if (instancePopup) { lv_obj_delete(instancePopup); instancePopup = NULL; }
+    if (subPrograms)   { lv_obj_delete(subPrograms);   subPrograms   = NULL; }
+    if (subDocuments)  { lv_obj_delete(subDocuments);   subDocuments  = NULL; }
+    if (startMenu)     { lv_obj_delete(startMenu);     startMenu     = NULL; }
 
     /* Defer deletion of ourselves */
-    if (dismiss_overlay) {
-        lv_obj_t *ov = dismiss_overlay;
-        dismiss_overlay = NULL;
+    if (dismissOverlay) {
+        lv_obj_t *ov = dismissOverlay;
+        dismissOverlay = NULL;
         lv_obj_delete_async(ov);
     }
 }
 
 /* Create a full-screen transparent clickable overlay behind popups */
-static void create_dismiss_overlay(void)
+static void createDismissOverlay(void)
 {
-    if (dismiss_overlay) return;
+    if (dismissOverlay) return;
 
-    dismiss_overlay = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(dismiss_overlay, SCREEN_WIDTH, SCREEN_HEIGHT);
-    lv_obj_set_pos(dismiss_overlay, 0, 0);
-    lv_obj_set_style_bg_opa(dismiss_overlay, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(dismiss_overlay, 0, 0);
-    lv_obj_set_style_radius(dismiss_overlay, 0, 0);
-    lv_obj_set_style_pad_all(dismiss_overlay, 0, 0);
-    lv_obj_remove_flag(dismiss_overlay, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(dismiss_overlay, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(dismiss_overlay, on_dismiss_overlay,
+    dismissOverlay = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(dismissOverlay, SCREEN_WIDTH, SCREEN_HEIGHT);
+    lv_obj_set_pos(dismissOverlay, 0, 0);
+    lv_obj_set_style_bg_opa(dismissOverlay, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dismissOverlay, 0, 0);
+    lv_obj_set_style_radius(dismissOverlay, 0, 0);
+    lv_obj_set_style_pad_all(dismissOverlay, 0, 0);
+    lv_obj_remove_flag(dismissOverlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(dismissOverlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(dismissOverlay, onDismissOverlay,
                         LV_EVENT_CLICKED, NULL);
 }
 
-static void on_tb_group_click(lv_event_t *e)
+static void onTbGroupClick(lv_event_t *e)
 {
-    tb_group_t *g = (tb_group_t *)lv_event_get_user_data(e);
+    TbGroup *g = (TbGroup *)lv_event_get_user_data(e);
 
     /* Close the start menu if it's open */
-    close_start_menu();
+    closeStartMenu();
 
     /* If popup is already open for this group, close it */
-    if (instance_popup) {
-        close_instance_popup();
+    if (instancePopup) {
+        closeInstancePopup();
         return;
     }
 
     /* Single instance — toggle minimize/restore directly */
     if (g->count == 1) {
-        win_state_t *st = NULL;
+        WinState *st = NULL;
         for (int i = 0; i < MAX_WINDOWS; i++) {
-            if (windows[i].in_use && windows[i].group_tb == g) {
+            if (windows[i].inUse && windows[i].groupTb == g) {
                 st = &windows[i];
                 break;
             }
@@ -821,32 +821,32 @@ static void on_tb_group_click(lv_event_t *e)
         if (st->minimized) {
             st->minimized = false;
             lv_obj_remove_flag(st->win, LV_OBJ_FLAG_HIDDEN);
-            raise_window(st);
+            raiseWindow(st);
             if (!st->maximized) {
-                show_grips(st, true);
-                update_grips(st);
+                showGrips(st, true);
+                updateGrips(st);
             }
         } else {
             st->minimized = true;
             lv_obj_add_flag(st->win, LV_OBJ_FLAG_HIDDEN);
-            show_grips(st, false);
+            showGrips(st, false);
         }
         return;
     }
 
     /* Multiple instances — show a popup listing them */
-    win_state_t *sorted[MAX_WINDOWS];
-    int n = collect_group_windows(g, sorted, MAX_WINDOWS);
+    WinState *sorted[MAX_WINDOWS];
+    int n = collectGroupWindows(g, sorted, MAX_WINDOWS);
     if (n == 0) return;
 
     /* Transparent overlay catches clicks outside the popup */
-    create_dismiss_overlay();
+    createDismissOverlay();
 
-    instance_popup = lv_obj_create(lv_screen_active());
-    lv_obj_add_style(instance_popup, &style_menu, 0);
-    lv_obj_set_size(instance_popup, 180, LV_SIZE_CONTENT);
-    lv_obj_remove_flag(instance_popup, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(instance_popup, LV_FLEX_FLOW_COLUMN);
+    instancePopup = lv_obj_create(lv_screen_active());
+    lv_obj_add_style(instancePopup, &styleMenu, 0);
+    lv_obj_set_size(instancePopup, 180, LV_SIZE_CONTENT);
+    lv_obj_remove_flag(instancePopup, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(instancePopup, LV_FLEX_FLOW_COLUMN);
 
     for (int i = 0; i < n; i++) {
         /* Build label like "Editor (1)", "Editor (2)" */
@@ -872,55 +872,55 @@ static void on_tb_group_click(lv_event_t *e)
             buf[len] = '\0';
         }
 
-        lv_obj_t *item = add_menu_item(instance_popup, buf);
-        lv_obj_add_event_cb(item, on_instance_click,
+        lv_obj_t *item = addMenuItem(instancePopup, buf);
+        lv_obj_add_event_cb(item, onInstanceClick,
                             LV_EVENT_CLICKED, sorted[i]);
     }
 
     /* Position above the taskbar button */
-    lv_obj_update_layout(instance_popup);
-    int32_t popup_h = lv_obj_get_height(instance_popup);
-    int32_t btn_x   = lv_obj_get_x(g->btn);
-    lv_obj_set_pos(instance_popup, btn_x,
-                   SCREEN_HEIGHT - TASKBAR_HEIGHT - popup_h - 4);
+    lv_obj_update_layout(instancePopup);
+    int32_t popupH = lv_obj_get_height(instancePopup);
+    int32_t btnX   = lv_obj_get_x(g->btn);
+    lv_obj_set_pos(instancePopup, btnX,
+                   SCREEN_HEIGHT - TASKBAR_HEIGHT - popupH - 4);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Grip creation                                                     */
 /* ------------------------------------------------------------------ */
 
-static void create_grips(win_state_t *st)
+static void createGrips(WinState *st)
 {
     for (int i = 0; i < GRIP_COUNT; i++) {
-        lv_obj_t *g = lv_obj_create(desktop_area);
-        lv_obj_add_style(g, &style_grip, 0);
-        lv_obj_add_style(g, &style_grip_hover, LV_STATE_HOVERED);
+        lv_obj_t *g = lv_obj_create(desktopArea);
+        lv_obj_add_style(g, &styleGrip, 0);
+        lv_obj_add_style(g, &styleGripHover, LV_STATE_HOVERED);
         lv_obj_remove_flag(g, LV_OBJ_FLAG_SCROLLABLE);
-        st->grip_data[i].dir = (grip_dir_t)i;
-        st->grip_data[i].wst = st;
-        lv_obj_add_event_cb(g, on_grip_pressed,  LV_EVENT_PRESSED,  &st->grip_data[i]);
-        lv_obj_add_event_cb(g, on_grip_pressing,  LV_EVENT_PRESSING, &st->grip_data[i]);
-        lv_obj_add_event_cb(g, on_grip_released, LV_EVENT_RELEASED, &st->grip_data[i]);
+        st->gripData[i].dir = (GripDir)i;
+        st->gripData[i].wst = st;
+        lv_obj_add_event_cb(g, onGripPressed,  LV_EVENT_PRESSED,  &st->gripData[i]);
+        lv_obj_add_event_cb(g, onGripPressing,  LV_EVENT_PRESSING, &st->gripData[i]);
+        lv_obj_add_event_cb(g, onGripReleased, LV_EVENT_RELEASED, &st->gripData[i]);
         st->grips[i] = g;
     }
-    update_grips(st);
+    updateGrips(st);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Window creation                                                   */
 /* ------------------------------------------------------------------ */
 
-static lv_obj_t *create_window(lv_obj_t *parent, const char *title,
+static lv_obj_t *createWindow(lv_obj_t *parent, const char *title,
                                int32_t x, int32_t y,
                                int32_t w, int32_t h,
                                lv_group_t *group)
 {
-    win_state_t *st = win_state_alloc();
+    WinState *st = winStateAlloc();
     if (!st) return NULL;
 
-    st->input_group = group;
-    st->orig_x = x;  st->orig_y = y;
-    st->orig_w = w;  st->orig_h = h;
+    st->inputGroup = group;
+    st->origX = x;  st->origY = y;
+    st->origW = w;  st->origH = h;
     strncpy(st->title, title, MAX_TITLE - 1);
     st->title[MAX_TITLE - 1] = '\0';
 
@@ -930,34 +930,34 @@ static lv_obj_t *create_window(lv_obj_t *parent, const char *title,
 
     lv_obj_t *header = lv_win_get_header(win);
     lv_obj_set_height(header, 30);
-    lv_obj_add_event_cb(header, on_header_pressed,  LV_EVENT_PRESSED,  st);
-    lv_obj_add_event_cb(header, on_header_pressing,  LV_EVENT_PRESSING, st);
-    lv_obj_add_event_cb(header, on_header_released, LV_EVENT_RELEASED, st);
+    lv_obj_add_event_cb(header, onHeaderPressed,  LV_EVENT_PRESSED,  st);
+    lv_obj_add_event_cb(header, onHeaderPressing,  LV_EVENT_PRESSING, st);
+    lv_obj_add_event_cb(header, onHeaderReleased, LV_EVENT_RELEASED, st);
 
-    lv_obj_t *btn_min = lv_win_add_button(win, LV_SYMBOL_MINUS, 30);
-    lv_obj_add_event_cb(btn_min, on_minimize, LV_EVENT_CLICKED, st);
+    lv_obj_t *btnMin = lv_win_add_button(win, LV_SYMBOL_MINUS, 30);
+    lv_obj_add_event_cb(btnMin, onMinimize, LV_EVENT_CLICKED, st);
 
-    lv_obj_t *btn_max = lv_win_add_button(win, LV_SYMBOL_PLUS, 30);
-    lv_obj_add_event_cb(btn_max, on_maximize, LV_EVENT_CLICKED, st);
-    st->btn_maximize = btn_max;
+    lv_obj_t *btnMax = lv_win_add_button(win, LV_SYMBOL_PLUS, 30);
+    lv_obj_add_event_cb(btnMax, onMaximize, LV_EVENT_CLICKED, st);
+    st->btnMaximize = btnMax;
 
-    lv_obj_t *btn_close = lv_win_add_button(win, LV_SYMBOL_CLOSE, 30);
-    lv_obj_set_style_bg_color(btn_close, lv_color_hex(0xCC3333), 0);
-    lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(btn_close, on_close, LV_EVENT_CLICKED, st);
+    lv_obj_t *btnClose = lv_win_add_button(win, LV_SYMBOL_CLOSE, 30);
+    lv_obj_set_style_bg_color(btnClose, lv_color_hex(0xCC3333), 0);
+    lv_obj_set_style_bg_opa(btnClose, LV_OPA_COVER, 0);
+    lv_obj_add_event_cb(btnClose, onClose, LV_EVENT_CLICKED, st);
 
     lv_obj_set_pos(win, x, y);
     lv_obj_set_size(win, w, h);
     lv_obj_set_style_anim_duration(win, 0, 0);
 
-    lv_obj_add_event_cb(win, on_win_pressed, LV_EVENT_PRESSED, st);
-    lv_obj_t *win_content = lv_win_get_content(win);
-    lv_obj_add_flag(win_content, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(win, onWinPressed, LV_EVENT_PRESSED, st);
+    lv_obj_t *winContent = lv_win_get_content(win);
+    lv_obj_add_flag(winContent, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     /* Add to taskbar group */
-    add_to_tb_group(st);
+    addToTbGroup(st);
 
-    create_grips(st);
+    createGrips(st);
     return win;
 }
 
@@ -965,15 +965,15 @@ static lv_obj_t *create_window(lv_obj_t *parent, const char *title,
 /*  Editor creation helper                                            */
 /* ------------------------------------------------------------------ */
 
-static lv_group_t *app_group;
+static lv_group_t *appGroup;
 
-static void create_editor(lv_group_t *group, int32_t x, int32_t y)
+static void createEditor(lv_group_t *group, int32_t x, int32_t y)
 {
-    int32_t win_w = 370;
-    int32_t win_h = 256;
+    int32_t winW = 370;
+    int32_t winH = 256;
 
-    lv_obj_t *win = create_window(desktop_area, "Editor",
-                                  x, y, win_w, win_h, group);
+    lv_obj_t *win = createWindow(desktopArea, "Editor",
+                                  x, y, winW, winH, group);
     if (!win) return;
 
     lv_obj_t *content = lv_win_get_content(win);
@@ -993,95 +993,95 @@ static void create_editor(lv_group_t *group, int32_t x, int32_t y)
 /*  Start menu                                                        */
 /* ------------------------------------------------------------------ */
 
-static void close_start_menu(void)
+static void closeStartMenu(void)
 {
-    if (sub_programs)   { lv_obj_delete(sub_programs);   sub_programs   = NULL; }
-    if (sub_documents)  { lv_obj_delete(sub_documents);  sub_documents  = NULL; }
-    if (start_menu)     { lv_obj_delete(start_menu);     start_menu     = NULL; }
-    if (dismiss_overlay){ lv_obj_delete(dismiss_overlay); dismiss_overlay = NULL; }
+    if (subPrograms)    { lv_obj_delete(subPrograms);    subPrograms    = NULL; }
+    if (subDocuments)   { lv_obj_delete(subDocuments);   subDocuments   = NULL; }
+    if (startMenu)      { lv_obj_delete(startMenu);      startMenu      = NULL; }
+    if (dismissOverlay) { lv_obj_delete(dismissOverlay); dismissOverlay = NULL; }
 }
 
-static void close_submenus(void)
+static void closeSubmenus(void)
 {
-    if (sub_programs)  { lv_obj_delete(sub_programs);  sub_programs  = NULL; }
-    if (sub_documents) { lv_obj_delete(sub_documents); sub_documents = NULL; }
+    if (subPrograms)  { lv_obj_delete(subPrograms);  subPrograms  = NULL; }
+    if (subDocuments) { lv_obj_delete(subDocuments); subDocuments = NULL; }
 }
 
 /* --- Programs submenu ---------------------------------------------- */
 
-static void on_editor_click(lv_event_t *e)
+static void onEditorClick(lv_event_t *e)
 {
     (void)e;
-    close_start_menu();
-    static int spawn_count = 0;
-    int32_t off = (spawn_count++ % 5) * 20;
-    create_editor(app_group, 40 + off, 20 + off);
+    closeStartMenu();
+    static int spawnCount = 0;
+    int32_t off = (spawnCount++ % 5) * 20;
+    createEditor(appGroup, 40 + off, 20 + off);
 }
 
-static void show_programs_submenu(void)
+static void showProgramsSubmenu(void)
 {
-    close_submenus();
-    int32_t menu_x = lv_obj_get_x(start_menu) + lv_obj_get_width(start_menu);
-    int32_t menu_y = lv_obj_get_y(start_menu);
+    closeSubmenus();
+    int32_t menuX = lv_obj_get_x(startMenu) + lv_obj_get_width(startMenu);
+    int32_t menuY = lv_obj_get_y(startMenu);
 
-    sub_programs = lv_obj_create(lv_screen_active());
-    lv_obj_add_style(sub_programs, &style_menu, 0);
-    lv_obj_set_size(sub_programs, 140, LV_SIZE_CONTENT);
-    lv_obj_set_pos(sub_programs, menu_x, menu_y);
-    lv_obj_remove_flag(sub_programs, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(sub_programs, LV_FLEX_FLOW_COLUMN);
+    subPrograms = lv_obj_create(lv_screen_active());
+    lv_obj_add_style(subPrograms, &styleMenu, 0);
+    lv_obj_set_size(subPrograms, 140, LV_SIZE_CONTENT);
+    lv_obj_set_pos(subPrograms, menuX, menuY);
+    lv_obj_remove_flag(subPrograms, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(subPrograms, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *item = add_menu_item(sub_programs, LV_SYMBOL_EDIT " Editor");
-    lv_obj_add_event_cb(item, on_editor_click, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *item = addMenuItem(subPrograms, LV_SYMBOL_EDIT " Editor");
+    lv_obj_add_event_cb(item, onEditorClick, LV_EVENT_CLICKED, NULL);
 }
 
-static void on_programs_hover(lv_event_t *e)
+static void onProgramsHover(lv_event_t *e)
 {
     (void)e;
-    show_programs_submenu();
+    showProgramsSubmenu();
 }
 
 /* --- Documents submenu --------------------------------------------- */
 
-static void show_documents_submenu(void)
+static void showDocumentsSubmenu(void)
 {
-    close_submenus();
-    int32_t menu_x = lv_obj_get_x(start_menu) + lv_obj_get_width(start_menu);
-    int32_t menu_y = lv_obj_get_y(start_menu);
+    closeSubmenus();
+    int32_t menuX = lv_obj_get_x(startMenu) + lv_obj_get_width(startMenu);
+    int32_t menuY = lv_obj_get_y(startMenu);
 
-    sub_documents = lv_obj_create(lv_screen_active());
-    lv_obj_add_style(sub_documents, &style_menu, 0);
-    lv_obj_set_size(sub_documents, 160, LV_SIZE_CONTENT);
-    lv_obj_set_pos(sub_documents, menu_x, menu_y + 30);
-    lv_obj_remove_flag(sub_documents, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(sub_documents, LV_FLEX_FLOW_COLUMN);
+    subDocuments = lv_obj_create(lv_screen_active());
+    lv_obj_add_style(subDocuments, &styleMenu, 0);
+    lv_obj_set_size(subDocuments, 160, LV_SIZE_CONTENT);
+    lv_obj_set_pos(subDocuments, menuX, menuY + 30);
+    lv_obj_remove_flag(subDocuments, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(subDocuments, LV_FLEX_FLOW_COLUMN);
 
-    lv_obj_t *item = add_menu_item(sub_documents, "(empty)");
+    lv_obj_t *item = addMenuItem(subDocuments, "(empty)");
     lv_obj_set_style_text_color(item, lv_color_hex(0x888888), 0);
     lv_obj_remove_flag(item, LV_OBJ_FLAG_CLICKABLE);
 }
 
-static void on_documents_hover(lv_event_t *e)
+static void onDocumentsHover(lv_event_t *e)
 {
     (void)e;
-    show_documents_submenu();
+    showDocumentsSubmenu();
 }
 
 /* --- Shutdown ------------------------------------------------------ */
 
-static void on_shutdown_hover(lv_event_t *e)
+static void onShutdownHover(lv_event_t *e)
 {
     (void)e;
-    close_submenus();
+    closeSubmenus();
 }
 
-static int shutdown_selection = 0;
+static int shutdownSelection = 0;
 
-static void on_shutdown_option(lv_event_t *e)
+static void onShutdownOption(lv_event_t *e)
 {
     lv_obj_t *cb = lv_event_get_target_obj(e);
     int32_t idx = (int32_t)(intptr_t)lv_event_get_user_data(e);
-    shutdown_selection = idx;
+    shutdownSelection = idx;
 
     lv_obj_t *parent = lv_obj_get_parent(cb);
     uint32_t cnt = lv_obj_get_child_count(parent);
@@ -1094,44 +1094,44 @@ static void on_shutdown_option(lv_event_t *e)
     }
 }
 
-static void on_shutdown_ok(lv_event_t *e)
+static void onShutdownOk(lv_event_t *e)
 {
     (void)e;
-    if (shutdown_dlg) { lv_obj_delete(shutdown_dlg); shutdown_dlg = NULL; }
+    if (shutdownDlg) { lv_obj_delete(shutdownDlg); shutdownDlg = NULL; }
 }
 
-static void on_shutdown_cancel(lv_event_t *e)
+static void onShutdownCancel(lv_event_t *e)
 {
     (void)e;
-    if (shutdown_dlg) { lv_obj_delete(shutdown_dlg); shutdown_dlg = NULL; }
+    if (shutdownDlg) { lv_obj_delete(shutdownDlg); shutdownDlg = NULL; }
 }
 
-static void show_shutdown_dialog(void)
+static void showShutdownDialog(void)
 {
-    if (shutdown_dlg) return;
+    if (shutdownDlg) return;
 
-    int32_t dlg_w = 260, dlg_h = 180;
-    int32_t dlg_x = (SCREEN_WIDTH - dlg_w) / 2;
-    int32_t dlg_y = (SCREEN_HEIGHT - TASKBAR_HEIGHT - dlg_h) / 2;
+    int32_t dlgW = 260, dlgH = 180;
+    int32_t dlgX = (SCREEN_WIDTH - dlgW) / 2;
+    int32_t dlgY = (SCREEN_HEIGHT - TASKBAR_HEIGHT - dlgH) / 2;
 
-    shutdown_dlg = lv_obj_create(lv_screen_active());
-    lv_obj_set_pos(shutdown_dlg, dlg_x, dlg_y);
-    lv_obj_set_size(shutdown_dlg, dlg_w, dlg_h);
-    lv_obj_set_style_bg_color(shutdown_dlg, lv_color_hex(0x222244), 0);
-    lv_obj_set_style_bg_opa(shutdown_dlg, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(shutdown_dlg, lv_color_hex(0x444466), 0);
-    lv_obj_set_style_border_width(shutdown_dlg, 2, 0);
-    lv_obj_set_style_radius(shutdown_dlg, 6, 0);
-    lv_obj_set_style_pad_all(shutdown_dlg, 15, 0);
-    lv_obj_remove_flag(shutdown_dlg, LV_OBJ_FLAG_SCROLLABLE);
+    shutdownDlg = lv_obj_create(lv_screen_active());
+    lv_obj_set_pos(shutdownDlg, dlgX, dlgY);
+    lv_obj_set_size(shutdownDlg, dlgW, dlgH);
+    lv_obj_set_style_bg_color(shutdownDlg, lv_color_hex(0x222244), 0);
+    lv_obj_set_style_bg_opa(shutdownDlg, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(shutdownDlg, lv_color_hex(0x444466), 0);
+    lv_obj_set_style_border_width(shutdownDlg, 2, 0);
+    lv_obj_set_style_radius(shutdownDlg, 6, 0);
+    lv_obj_set_style_pad_all(shutdownDlg, 15, 0);
+    lv_obj_remove_flag(shutdownDlg, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title = lv_label_create(shutdown_dlg);
+    lv_obj_t *title = lv_label_create(shutdownDlg);
     lv_label_set_text(title, "Shut Down");
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    lv_obj_t *opts = lv_obj_create(shutdown_dlg);
+    lv_obj_t *opts = lv_obj_create(shutdownDlg);
     lv_obj_set_size(opts, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(opts, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(opts, 0, 0);
@@ -1142,78 +1142,78 @@ static void show_shutdown_dialog(void)
     lv_obj_remove_flag(opts, LV_OBJ_FLAG_SCROLLABLE);
 
     static const char *labels[] = { "Power Off", "Suspend", "Restart" };
-    shutdown_selection = 0;
+    shutdownSelection = 0;
     for (int i = 0; i < 3; i++) {
         lv_obj_t *cb = lv_checkbox_create(opts);
         lv_checkbox_set_text(cb, labels[i]);
         lv_obj_set_style_text_color(cb, lv_color_white(), 0);
         if (i == 0) lv_obj_add_state(cb, LV_STATE_CHECKED);
-        lv_obj_add_event_cb(cb, on_shutdown_option, LV_EVENT_VALUE_CHANGED,
+        lv_obj_add_event_cb(cb, onShutdownOption, LV_EVENT_VALUE_CHANGED,
                             (void *)(intptr_t)i);
     }
 
-    lv_obj_t *btn_ok = lv_button_create(shutdown_dlg);
-    lv_obj_set_size(btn_ok, 70, 32);
-    lv_obj_align(btn_ok, LV_ALIGN_BOTTOM_RIGHT, -78, 0);
-    lv_obj_t *lbl_ok = lv_label_create(btn_ok);
-    lv_label_set_text(lbl_ok, "Ok");
-    lv_obj_center(lbl_ok);
-    lv_obj_add_event_cb(btn_ok, on_shutdown_ok, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *btnOk = lv_button_create(shutdownDlg);
+    lv_obj_set_size(btnOk, 70, 32);
+    lv_obj_align(btnOk, LV_ALIGN_BOTTOM_RIGHT, -78, 0);
+    lv_obj_t *lblOk = lv_label_create(btnOk);
+    lv_label_set_text(lblOk, "Ok");
+    lv_obj_center(lblOk);
+    lv_obj_add_event_cb(btnOk, onShutdownOk, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *btn_cancel = lv_button_create(shutdown_dlg);
-    lv_obj_set_size(btn_cancel, 70, 32);
-    lv_obj_align(btn_cancel, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
-    lv_obj_t *lbl_cancel = lv_label_create(btn_cancel);
-    lv_label_set_text(lbl_cancel, "Cancel");
-    lv_obj_center(lbl_cancel);
-    lv_obj_add_event_cb(btn_cancel, on_shutdown_cancel, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *btnCancel = lv_button_create(shutdownDlg);
+    lv_obj_set_size(btnCancel, 70, 32);
+    lv_obj_align(btnCancel, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_t *lblCancel = lv_label_create(btnCancel);
+    lv_label_set_text(lblCancel, "Cancel");
+    lv_obj_center(lblCancel);
+    lv_obj_add_event_cb(btnCancel, onShutdownCancel, LV_EVENT_CLICKED, NULL);
 }
 
-static void on_shutdown_click(lv_event_t *e)
+static void onShutdownClick(lv_event_t *e)
 {
     (void)e;
-    close_start_menu();
-    show_shutdown_dialog();
+    closeStartMenu();
+    showShutdownDialog();
 }
 
 /* ------------------------------------------------------------------ */
 /*  Start button + menu                                               */
 /* ------------------------------------------------------------------ */
 
-static void on_start_click(lv_event_t *e)
+static void onStartClick(lv_event_t *e)
 {
     (void)e;
-    close_instance_popup();
+    closeInstancePopup();
 
-    if (start_menu) {
-        close_start_menu();
+    if (startMenu) {
+        closeStartMenu();
         return;
     }
 
     /* Transparent overlay catches clicks outside the menu */
-    create_dismiss_overlay();
+    createDismissOverlay();
 
-    start_menu = lv_obj_create(lv_screen_active());
-    lv_obj_add_style(start_menu, &style_menu, 0);
-    lv_obj_set_size(start_menu, 160, LV_SIZE_CONTENT);
-    lv_obj_remove_flag(start_menu, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(start_menu, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_pos(start_menu, 4,
+    startMenu = lv_obj_create(lv_screen_active());
+    lv_obj_add_style(startMenu, &styleMenu, 0);
+    lv_obj_set_size(startMenu, 160, LV_SIZE_CONTENT);
+    lv_obj_remove_flag(startMenu, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(startMenu, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_pos(startMenu, 4,
                    SCREEN_HEIGHT - TASKBAR_HEIGHT - 4);
 
-    lv_obj_update_layout(start_menu);
+    lv_obj_update_layout(startMenu);
 
-    lv_obj_t *mi_prog = add_menu_item(start_menu,
+    lv_obj_t *miProg = addMenuItem(startMenu,
                                       LV_SYMBOL_DIRECTORY " Programs  "
                                       LV_SYMBOL_RIGHT);
-    lv_obj_add_event_cb(mi_prog, on_programs_hover, LV_EVENT_HOVER_OVER, NULL);
+    lv_obj_add_event_cb(miProg, onProgramsHover, LV_EVENT_HOVER_OVER, NULL);
 
-    lv_obj_t *mi_docs = add_menu_item(start_menu,
+    lv_obj_t *miDocs = addMenuItem(startMenu,
                                       LV_SYMBOL_FILE " Documents  "
                                       LV_SYMBOL_RIGHT);
-    lv_obj_add_event_cb(mi_docs, on_documents_hover, LV_EVENT_HOVER_OVER, NULL);
+    lv_obj_add_event_cb(miDocs, onDocumentsHover, LV_EVENT_HOVER_OVER, NULL);
 
-    lv_obj_t *sep = lv_obj_create(start_menu);
+    lv_obj_t *sep = lv_obj_create(startMenu);
     lv_obj_set_size(sep, LV_PCT(100), 1);
     lv_obj_set_style_bg_color(sep, lv_color_hex(0x444466), 0);
     lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
@@ -1221,36 +1221,36 @@ static void on_start_click(lv_event_t *e)
     lv_obj_set_style_pad_all(sep, 0, 0);
     lv_obj_remove_flag(sep, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *mi_shut = add_menu_item(start_menu,
+    lv_obj_t *miShut = addMenuItem(startMenu,
                                       LV_SYMBOL_POWER " Shutdown");
-    lv_obj_add_event_cb(mi_shut, on_shutdown_hover, LV_EVENT_HOVER_OVER, NULL);
-    lv_obj_add_event_cb(mi_shut, on_shutdown_click, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(miShut, onShutdownHover, LV_EVENT_HOVER_OVER, NULL);
+    lv_obj_add_event_cb(miShut, onShutdownClick, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_update_layout(start_menu);
-    int32_t menu_h = lv_obj_get_height(start_menu);
-    lv_obj_set_pos(start_menu, 4,
-                   SCREEN_HEIGHT - TASKBAR_HEIGHT - menu_h - 4);
+    lv_obj_update_layout(startMenu);
+    int32_t menuH = lv_obj_get_height(startMenu);
+    lv_obj_set_pos(startMenu, 4,
+                   SCREEN_HEIGHT - TASKBAR_HEIGHT - menuH - 4);
 }
 
 /* ------------------------------------------------------------------ */
 /*  Public entry point                                                */
 /* ------------------------------------------------------------------ */
 
-void desktop_create(lv_group_t *group)
+void desktopCreate(lv_group_t *group)
 {
-    app_group = group;
-    init_styles();
-    create_desktop_and_taskbar();
+    appGroup = group;
+    initStyles();
+    createDesktopAndTaskbar();
 
-    lv_obj_t *start_btn = lv_button_create(taskbar);
-    lv_obj_add_style(start_btn, &style_taskbar_btn, 0);
-    lv_obj_set_height(start_btn, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(start_btn, lv_color_hex(0x2266AA), 0);
-    lv_obj_set_style_bg_opa(start_btn, LV_OPA_COVER, 0);
+    lv_obj_t *startBtn = lv_button_create(taskbar);
+    lv_obj_add_style(startBtn, &styleTaskbarBtn, 0);
+    lv_obj_set_height(startBtn, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(startBtn, lv_color_hex(0x2266AA), 0);
+    lv_obj_set_style_bg_opa(startBtn, LV_OPA_COVER, 0);
 
-    lv_obj_t *start_lbl = lv_label_create(start_btn);
-    lv_label_set_text(start_lbl, LV_SYMBOL_LIST " Start");
-    lv_obj_center(start_lbl);
+    lv_obj_t *startLbl = lv_label_create(startBtn);
+    lv_label_set_text(startLbl, LV_SYMBOL_LIST " Start");
+    lv_obj_center(startLbl);
 
-    lv_obj_add_event_cb(start_btn, on_start_click, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(startBtn, onStartClick, LV_EVENT_CLICKED, NULL);
 }

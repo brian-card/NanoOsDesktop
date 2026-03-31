@@ -23,6 +23,6 @@
  *               (text areas, buttons, etc.) will be added to this group
  *               so they can receive key events.
  */
-void desktop_create(lv_group_t *group);
+void desktopCreate(lv_group_t *group);
 
 #endif /* DESKTOP_H */

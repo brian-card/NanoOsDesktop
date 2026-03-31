@@ -97,7 +97,7 @@ int main(void)
     lv_indev_set_group(keyboard, group);
 
     /* Build the desktop UI (pure LVGL, no platform knowledge) */
-    desktop_create(group);
+    desktopCreate(group);
 
     /* Main loop — lv_timer_handler() drives rendering and
      * internally pumps SDL events via the registered drivers. */
